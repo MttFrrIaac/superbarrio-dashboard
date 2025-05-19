@@ -14,84 +14,91 @@ def load_data():
     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
     return df.dropna(subset=['N', 'E'])
 
-df_full = load_data()
+df = load_data()
+
+# --- Define category colors ---
+category_colors = {
+    "Accessibility": "#FF6347",
+    "Traffic-Management-Solutions": "#3CB371",
+    "PMV-Infrastructure": "#1E90FF",
+    "Tactical-Urbanism": "#9370DB"
+}
+
+# --- Layout Tweaks ---
+st.set_page_config(layout="wide")
 
 # --- Sidebar Filters ---
-st.sidebar.header("🗂 Filters for Map of Solutions")
+st.sidebar.header("Filters")
 
-# Filter 1: Full Filters for Marker Map
-df = df_full.copy()
-date_range = st.sidebar.date_input("Date Range", [df['Date'].min(), df['Date'].max()])
-df = df[(df['Date'] >= pd.to_datetime(date_range[0])) & (df['Date'] <= pd.to_datetime(date_range[1]))]
+# Filter for Map of Solutions
+st.sidebar.subheader("Map Filters")
+df_map = df.copy()
+date_range_map = st.sidebar.date_input("Date Range (Map)", [df_map['Date'].min(), df_map['Date'].max()])
+df_map = df_map[(df_map['Date'] >= pd.to_datetime(date_range_map[0])) & (df_map['Date'] <= pd.to_datetime(date_range_map[1]))]
 
-for col in ['Workshop', 'Version', 'Category', 'Solution']:
-    if col in df.columns:
-        options = df[col].dropna().unique()
-        selected = st.sidebar.multiselect(f"Select {col}", options, default=options)
-        df = df[df[col].isin(selected)]
+with st.sidebar.expander("Category Filters (Map)", expanded=True):
+    for col in ['Workshop', 'Version', 'Category', 'Solution']:
+        if col in df_map.columns:
+            options = df_map[col].dropna().unique()
+            selected = st.multiselect(f"Select {col}", options, default=list(options))
+            df_map = df_map[df_map[col].isin(selected)]
 
-# Filter 2: Category Filter for Heatmap
-st.sidebar.header("🔥 Filter for Heatmap")
-heatmap_categories = df_full['Category'].dropna().unique()
-selected_categories = st.sidebar.multiselect("Select Category for Heatmap", heatmap_categories, default=list(heatmap_categories))
-df_heatmap = df_full[df_full['Category'].isin(selected_categories)]
-
-# --- Main Title ---
+# --- Title ---
 st.title("🎯 SuperBarrio Interactive Dashboard")
 
-# --- Map of Solutions ---
-st.subheader("🗺️ Map of Solutions")
+# --- Layout Columns for Map + Dashboard ---
+col1, col2 = st.columns([2, 1])
 
-zaragoza_coords = [41.6488, -0.8891]
-marker_map = folium.Map(location=zaragoza_coords, zoom_start=13)
+with col1:
+    st.subheader("Map of Solutions")
+    if not df_map.empty:
+        m = folium.Map(location=[41.6488, -0.8891], zoom_start=13)
+        for _, row in df_map.iterrows():
+            category = row.get('Category', '')
+            color = category_colors.get(category, 'gray')
+            popup = f"{row.get('Workshop', '')} - {category}: {row.get('Solution', '')}"
+            folium.Marker(
+                location=(row['N'], row['E']),
+                popup=popup,
+                icon=folium.Icon(color="blue", icon_color=color)
+            ).add_to(m)
+        st_folium(m, width=700, height=500)
+    else:
+        st.warning("No data available for selected filters on the map.")
 
-if not df.empty:
-    category_colors = {
-    'Accessibility': 'blue',
-    'Traffic-Management-Solutions': 'red',
-    'PMV-Infrastructure and Tactical-Urbanism': 'green',
-    'Active-Mobility': 'purple',
-    'Parking': 'orange',
-    'Other': 'gray'
-}
-    for _, row in df.iterrows():
-        popup = f"{row.get('Workshop', '')} - {row.get('Category', '')}: {row.get('Solution', '')}"
-        color = category_colors.get(row.get('Category', ''), 'gray')
-        folium.Marker(
-            location=(row['N'], row['E']),
-            popup=popup,
-            icon=folium.Icon(color=color)
-        ).add_to(marker_map)
+with col2:
+    st.subheader("Dashboard Summary")
+    if not df_map.empty:
+        st.markdown("**Number of Entries per Category**")
+        cat_counts = df_map['Category'].value_counts()
+        st.bar_chart(cat_counts)
 
-    st_folium(marker_map, width=700, height=500)
-else:
-    st.warning("No data for selected filters.")
+        st.markdown("**Number of Solutions per Workshop**")
+        ws_counts = df_map['Workshop'].value_counts()
+        st.bar_chart(ws_counts)
+    else:
+        st.info("Nothing to display in dashboard.")
 
-# --- Heatmap of Solutions ---
-st.subheader("🔥 Heatmap of Solutions (Filtered by Category Only)")
+# --- Heatmap Section ---
+st.markdown("### Heatmap of Solutions")
+heat_col1, heat_col2 = st.columns([4, 1])
 
-heatmap_map = folium.Map(location=zaragoza_coords, zoom_start=13)
+with heat_col2:
+    df_heat = df.copy()
+    cat_options = df_heat['Category'].dropna().unique()
+    selected_cats = st.multiselect("Filter by Category (Heatmap)", cat_options, default=list(cat_options))
+    df_heat = df_heat[df_heat['Category'].isin(selected_cats)]
 
-if not df_heatmap.empty:
-    heat_data = [[row['N'], row['E']] for _, row in df_heatmap.iterrows()]
-    HeatMap(heat_data, radius=10).add_to(heatmap_map)
-    st_folium(heatmap_map, width=700, height=500)
-else:
-    st.warning("No data for selected categories in heatmap.")
+with heat_col1:
+    if not df_heat.empty:
+        hm = folium.Map(location=[41.6488, -0.8891], zoom_start=13)
+        heat_data = df_heat[['N', 'E']].dropna().values.tolist()
+        HeatMap(heat_data).add_to(hm)
+        st_folium(hm, width=900, height=500)
+    else:
+        st.warning("No data available for selected filters on the heatmap.")
 
-# --- Dashboard Summary ---
-st.subheader("📊 Dashboard Summary")
-
-if not df.empty:
-    st.markdown("**Number of Entries per Category**")
-    st.bar_chart(df['Category'].value_counts())
-
-    st.markdown("**Number of Solutions per Workshop**")
-    st.bar_chart(df['Workshop'].value_counts())
-else:
-    st.info("Nothing to display in dashboard.")
-
-# --- Download Filtered Data ---
-st.subheader("⬇️ Download Filtered Data")
-csv = df.to_csv(index=False)
+# --- Download ---
+st.markdown("### ⬇️ Download Filtered Data")
+csv = df_map.to_csv(index=False)
 st.download_button("Download CSV", csv, file_name="filtered_data.csv", mime="text/csv")
