@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
+from folium.plugins import HeatMap
 
 # --- Load Data ---
 sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSffz39J7Ct_FPvZ34lEL5neXaAWTWeL4g_egbE-gYlM529sGf-oIKN-N2D3sUkxHcsk1kqxj1da89o/pub?gid=1278185519&single=true&output=csv"
@@ -9,7 +10,7 @@ sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSffz39J7Ct_FPvZ34l
 @st.cache_data
 def load_data():
     df = pd.read_csv(sheet_url)
-    df = df.rename(columns=lambda x: x.strip())  # Clean column names
+    df = df.rename(columns=lambda x: x.strip())
     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
     return df.dropna(subset=['N', 'E'])
 
@@ -32,20 +33,36 @@ for col in ['Workshop', 'Version', 'Category', 'Solution']:
 # --- Main Title ---
 st.title("🎯 SuperBarrio Interactive Dashboard")
 
-# --- Map View ---
+# --- Map with Markers and Heatmap ---
 st.subheader("🗺️ Map of Solutions")
+
+zaragoza_coords = [41.6488, -0.8891]  # Center on Zaragoza
+m = folium.Map(location=zaragoza_coords, zoom_start=13)
+
 if not df.empty:
-    m = folium.Map(location=[df['N'].mean(), df['E'].mean()], zoom_start=13)
+    # Marker colors per category
+    category_colors = {
+        'Environment': 'green',
+        'Mobility': 'blue',
+        'Health': 'red',
+        'Education': 'purple',
+        'Other': 'gray'
+    }
+
     for _, row in df.iterrows():
         popup = f"{row.get('Workshop', '')} - {row.get('Category', '')}: {row.get('Solution', '')}"
+        color = category_colors.get(row.get('Category', ''), 'gray')
         folium.Marker(
             location=(row['N'], row['E']),
             popup=popup,
-            icon=folium.Icon(color="blue", icon="info-sign")
+            icon=folium.Icon(color=color)
         ).add_to(m)
-    st_folium(m, width=700, height=500)
-else:
-    st.warning("No data available for selected filters.")
+
+    # Heatmap layer
+    heat_data = [[row['N'], row['E']] for _, row in df.iterrows()]
+    HeatMap(heat_data, radius=10).add_to(m)
+
+st_folium(m, width=700, height=500)
 
 # --- Dashboard View ---
 st.subheader("📊 Dashboard Summary")
