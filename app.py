@@ -27,6 +27,14 @@ category_colors = {
 # --- Layout Tweaks ---
 st.set_page_config(layout="wide")
 
+st.markdown("""
+    <div style="text-align: center; margin-top: 1rem; margin-bottom: 1rem;">
+        <img src="https://raw.githubusercontent.com/MttFrrIaac/superbarrio-dashboard/blob/main/Elaborator%20logo%20big.png" alt="Logo" style="height: 80px;">
+    </div>
+""", unsafe_allow_html=True)
+
+
+
 # --- Sidebar Filters ---
 st.sidebar.header("Filters")
 
@@ -40,11 +48,11 @@ with st.sidebar.expander("Category Filters (Map)", expanded=True):
     for col in ['Workshop', 'Version', 'Category', 'Solution']:
         if col in df_map.columns:
             options = df_map[col].dropna().unique()
-            selected = st.multiselect(f"Select {col}", options, default=list(options))
+            selected = st.multiselect(f"Select {col}", options)
             df_map = df_map[df_map[col].isin(selected)]
 
 # --- Title ---
-st.title("🎯 SuperBarrio Interactive Dashboard")
+st.title("Dashboard")
 
 # --- Layout Columns for Map + Dashboard ---
 col1, col2 = st.columns([2, 1])
@@ -52,7 +60,7 @@ col1, col2 = st.columns([2, 1])
 with col1:
     st.subheader("Map of Solutions")
     if not df_map.empty:
-        m = folium.Map(location=[41.6488, -0.8891], zoom_start=13)
+        m = folium.Map(location=[41.6488, -0.8891], zoom_start=13, tiles='CartoDB positron')
         for _, row in df_map.iterrows():
             category = row.get('Category', '')
             color = category_colors.get(category, 'gray')
@@ -60,14 +68,14 @@ with col1:
             folium.Marker(
                 location=(row['N'], row['E']),
                 popup=popup,
-                icon=folium.Icon(color="blue", icon_color=color)
+                icon=folium.Icon(color="black", icon="info-sign", icon_color=color)
             ).add_to(m)
         st_folium(m, width=700, height=500)
     else:
         st.warning("No data available for selected filters on the map.")
 
 with col2:
-    st.subheader("Dashboard Summary")
+    st.subheader("Summary")
     if not df_map.empty:
         st.markdown("**Number of Entries per Category**")
         cat_counts = df_map['Category'].value_counts()
@@ -80,7 +88,7 @@ with col2:
         st.info("Nothing to display in dashboard.")
 
 # --- Heatmap Section ---
-st.markdown("### Heatmap of Solutions")
+st.markdown("Heatmap of Solutions")
 heat_col1, heat_col2 = st.columns([4, 1])
 
 with heat_col2:
